@@ -114,7 +114,7 @@ TAPS_TEST_SRCS = tests/test_taps_redesign.c tests/mock_host.c tests/wav.c \
                    tests/malloc_trap.c src/dsp.c src/groove.c src/ui.c src/params.c \
                    $(wildcard src/models/*.c) src/dsp_primitives.c
 
-.PHONY: dsp.so dist test test-fm2 test-switch test-fx test-params test-distinct test-gen test-groove test-readback test-samples test-perf test-taps-redesign fixtures wavetables clean deploy
+.PHONY: dsp.so dr32_engine.so dist test test-fm2 test-switch test-fx test-params test-distinct test-gen test-groove test-readback test-samples test-perf test-taps-redesign fixtures wavetables clean deploy
 
 # --- Generated wavetables (B-02 Task 3, KICK-15) -----------------------------
 # src/wavetables.h defines g_wavetables[NUM_WAVES][BANDS][2049] in .rodata,
@@ -154,6 +154,18 @@ dsp.so: | src/wavetables.h
 # module folder — module.json + dsp.so) that release.json's download_url points
 # at. Run after `make dsp.so` (needs the aarch64 build). The tarball lays the
 # files under an `omega/` dir so it extracts into sound_generators/omega/.
+# DR32 engine plugin: Omega's kick models as engines for the DR32 drum rack
+# (src/dr32_engine.c, against DR32's vendored src/dr32_engine_api.h). Its own
+# shared object beside dsp.so; DR32 finds it by name. Only the kick models and
+# what they need are linked: no groove, no host ABI. -Bsymbolic + hidden
+# visibility keep it from binding to dsp.so's copy of the same symbols when
+# both are loaded in one process.
+DR32_SRCS = src/dr32_engine.c src/dsp_primitives.c src/params.c \
+            $(addprefix src/models/,fm2.c fm4.c wtr.c phy.c hrd.c dig.c trs.c ana.c)
+dr32_engine.so: | src/wavetables.h
+	@mkdir -p build
+	$(XCC) $(AARCH_FLAGS) -Wl,-Bsymbolic $(DR32_SRCS) -o build/dr32_engine.so $(LDLIBS)
+
 dist: dsp.so
 	@mkdir -p build/dist/omega
 	cp build/dsp.so build/dist/omega/dsp.so
